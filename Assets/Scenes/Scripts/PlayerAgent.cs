@@ -15,6 +15,9 @@ public class PlayerAgent : Agent
     [SerializeField]
     private float speed = 10f;
 
+    [Tooltip("How fast the agent turns")]
+    public float turnSpeed = 180f;
+
     private Vector3 originalPosition;
 
     private Vector3 originalTargetPosition;
@@ -48,53 +51,87 @@ public class PlayerAgent : Agent
     public override void OnEpisodeBegin()
     {
 
-        if (transform.localPosition.y < 0)
-        {
-            transform.localPosition = new Vector3(originalPosition.x, originalPosition.y, Random.Range(-4, 4));
-            playerRigidBody.angularVelocity = Vector3.zero;
-            playerRigidBody.velocity = Vector3.zero;
-        }
-
-        target.transform.localPosition = new Vector3(originalTargetPosition.x, originalPosition.y, Random.Range(-4, 4));
-
+      
+            transform.localPosition = new Vector3(originalPosition.x, originalPosition.y, Random.Range(-4, 4));   
+            target.transform.localPosition = new Vector3(originalTargetPosition.x, originalPosition.y, Random.Range(-4, 4));
+            transform.localRotation = Quaternion.Euler(new Vector3(0,-90,0));
+       
 
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        sensor.AddObservation(transform.localPosition);
-        sensor.AddObservation(target.transform.localPosition);
-        sensor.AddObservation(playerRigidBody.velocity.x);
-        sensor.AddObservation(playerRigidBody.velocity.y);
+
+        //sensor.AddObservation(transform.localPosition);
+        //sensor.AddObservation(target.transform.localPosition);
+       // sensor.AddObservation(playerRigidBody.velocity.x);
+        //sensor.AddObservation(playerRigidBody.velocity.y);
 
     }
-
+    
+    //https://github.com/Unity-Technologies/ml-agents/blob/master/docs/Learning-Environment-Design-Agents.md
+    float forwardAmount = 0;
+    float turnAmount = 0;
     public override void OnActionReceived(float[] vectorAction)
     {
-        var vectorForce = Vector3.zero;
-        vectorForce.x = vectorAction[0];
-        vectorForce.z = vectorAction[1];
-        Debug.Log(vectorForce);
-        playerRigidBody.AddForce(vectorForce * speed);
+        /*
+         MOVING
+         */
+        if (vectorAction[0] == 0)
+        {            
+            AddReward(-0.1f);
+           // return;
+        }
 
-      
-
-        var distanceFromTarget = Vector3.Distance(transform.localPosition, target.transform.localPosition);
-
-        //we are doing good
-        if(distanceFromTarget < 1.4)
+        if (vectorAction[0] == 1)
         {
-            SetReward(1f);
-            EndEpisode();
-            StartCoroutine(SwapGroundMaterial(successMaterial, 0.5f));
+              forwardAmount = 1f;
+              playerRigidBody.MovePosition(transform.position + transform.forward * forwardAmount * speed * Time.fixedDeltaTime);      
+                    
         }
 
 
-        //we are doing not good
+        /*
+         ROTATING
+         */
+
+        // Convert the second action to turning left or right
+
+        if (vectorAction[1] == 1f) //move left
+        {
+            turnAmount = -1f;
+        }
+        else if (vectorAction[1] == 2f)//move right
+        {
+            turnAmount = 1f;
+        }
+        else if (vectorAction[1] == 0)
+        {
+            turnAmount = 0f;
+        }
+       
+        transform.Rotate(transform.up * turnAmount * turnSpeed * Time.fixedDeltaTime);
+        //Debug.Log(rotation);
+
+
+
         if (transform.localPosition.y < 0)
         {
             EndEpisode();
             StartCoroutine(SwapGroundMaterial(failureMaterial, 0.5f));
+        }        
+
+       
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision.transform.CompareTag("target"))
+        {
+            AddReward(10);
+            StartCoroutine(SwapGroundMaterial(successMaterial, 0.5f));
+            EndEpisode();
+
         }
     }
 
@@ -102,11 +139,33 @@ public class PlayerAgent : Agent
 
     public override void Heuristic(float[] actionsOut)
     {
-        actionsOut[0] = Input.GetAxis("Vertical");     // get value of z
-        actionsOut[1] = Input.GetAxis("Horizontal");   // get value of x                                                     
-      
+        //actionsOut[0] = Input.GetAxis("Vertical");     // get value of z
+        //actionsOut[1] = Input.GetAxis("Horizontal");   // get value of x                                         
+        actionsOut[0] = 0f;
+        actionsOut[1] = 0f;
 
-}
+        //forward
+        if (Input.GetKey(KeyCode.Z))
+        {
+            actionsOut[0] = 1f;
+        }
+        if (Input.GetKey(KeyCode.Q))
+        {
+            actionsOut[1] = 1f;
+        }
+        //rotate
+        if (Input.GetKey(KeyCode.D))
+        {
+            actionsOut[1] = 2f;
+        }
+        if (Input.GetKey(KeyCode.X))//stop turning & moving
+        {
+            actionsOut[0] = 0;
+            actionsOut[1] = 0;
+        }
+
+
+    }
 
     private IEnumerator SwapGroundMaterial(Material mat, float time)
     {
